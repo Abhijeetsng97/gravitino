@@ -20,12 +20,14 @@
 package org.apache.gravitino.client;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Sets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.CatalogChange;
 import org.apache.gravitino.MetadataObject;
@@ -85,7 +87,7 @@ import org.apache.gravitino.tag.TagValueConstraint;
 public class GravitinoClient extends GravitinoClientBase
     implements SupportsCatalogs, TagOperations, SupportsJobs, PolicyOperations {
 
-  private final GravitinoMetalake metalake;
+  private final Supplier<GravitinoMetalake> metalake;
 
   /**
    * Constructs a new GravitinoClient with the given URI, authenticator and AuthDataProvider.
@@ -97,7 +99,6 @@ public class GravitinoClient extends GravitinoClientBase
    *     support the case that the client-side version is higher than the server-side version.
    * @param headers The base header for Gravitino API.
    * @param properties A map of properties (key-value pairs) used to configure the Gravitino client.
-   * @throws NoSuchMetalakeException if the metalake with specified name does not exist.
    */
   private GravitinoClient(
       String uri,
@@ -107,17 +108,18 @@ public class GravitinoClient extends GravitinoClientBase
       Map<String, String> headers,
       Map<String, String> properties) {
     super(uri, authDataProvider, checkVersion, headers, properties);
-    this.metalake = loadMetalake(metalakeName);
+    checkMetalakeName(metalakeName);
+    this.metalake = Suppliers.memoize(() -> loadMetalake(metalakeName));
   }
 
   /**
-   * Get the current metalake object
+   * Load the current metalake on first use and reuse it for subsequent operations.
    *
    * @return the {@link GravitinoMetalake} object
    * @throws NoSuchMetalakeException if the metalake with specified name does not exist.
    */
   private GravitinoMetalake getMetalake() {
-    return metalake;
+    return metalake.get();
   }
 
   @Override
@@ -750,11 +752,15 @@ public class GravitinoClient extends GravitinoClientBase
     }
 
     /**
-     * Builds a new GravitinoClient instance.
+     * Builds a new GravitinoClient instance without making remote calls.
+     *
+     * <p>The metalake is loaded on the first operation that uses it. If the metalake does not
+     * exist, that operation throws {@link NoSuchMetalakeException}. The server version check, when
+     * enabled, runs before the first remote request.
      *
      * @return A new instance of GravitinoClient with the specified base URI.
-     * @throws IllegalArgumentException If the base URI is null or empty.
-     * @throws NoSuchMetalakeException if the metalake with specified name does not exist.
+     * @throws IllegalArgumentException If the base URI is null or empty, or the metalake name is
+     *     invalid.
      */
     @Override
     public GravitinoClient build() {
