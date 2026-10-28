@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.apache.gravitino.Entity;
 import org.apache.gravitino.EntityStore;
 import org.apache.gravitino.MetadataObject;
@@ -66,6 +67,18 @@ public class EffectiveTagResolver {
    */
   public TagEntity[] resolve(String metalake, MetadataObject metadataObject) {
     MetadataObjectUtil.checkMetadataObject(metalake, metadataObject);
+    return resolve(metadataObject, object -> loadTags(metalake, object));
+  }
+
+  /**
+   * Resolves nearest-wins assignments using a reader of direct tags.
+   *
+   * @param metadataObject the target object
+   * @param reader the reader of direct assignments, returning a non-null list or throwing
+   * @return effective tags, with the target's assignment taking precedence over its ancestors
+   */
+  public static TagEntity[] resolve(
+      MetadataObject metadataObject, Function<MetadataObject, List<TagEntity>> reader) {
     List<MetadataObject> resolutionOrder = new ArrayList<>();
     resolutionOrder.add(metadataObject);
     resolutionOrder.addAll(MetadataObjectUtil.getParentMetadataObjects(metadataObject));
@@ -74,26 +87,27 @@ public class EffectiveTagResolver {
     for (int index = 0; index < resolutionOrder.size(); index++) {
       MetadataObject object = resolutionOrder.get(index);
       boolean inherited = index > 0;
-      NameIdentifier identifier = MetadataObjectUtil.toEntityIdent(metalake, object);
-      Entity.EntityType entityType = MetadataObjectUtil.toEntityType(object);
-      try {
-        List<TagEntity> tags =
-            entityStore
-                .relationOperations()
-                .listEntitiesByRelation(
-                    SupportsRelationOperations.Type.TAG_METADATA_OBJECT_REL,
-                    identifier,
-                    entityType);
-        tags.forEach(
-            tag -> effectiveTags.putIfAbsent(tag.name(), tag.copyWithInherited(inherited)));
-      } catch (NoSuchEntityException e) {
-        throw new NoSuchMetadataObjectException(
-            e, "Failed to resolve effective tags for metadata object %s due to not found", object);
-      } catch (IOException e) {
-        LOG.error("Failed to resolve effective tags for metadata object {}", object, e);
-        throw new RuntimeException(e);
-      }
+      reader
+          .apply(object)
+          .forEach(tag -> effectiveTags.putIfAbsent(tag.name(), tag.copyWithInherited(inherited)));
     }
     return effectiveTags.values().toArray(new TagEntity[0]);
+  }
+
+  private List<TagEntity> loadTags(String metalake, MetadataObject object) {
+    NameIdentifier identifier = MetadataObjectUtil.toEntityIdent(metalake, object);
+    Entity.EntityType entityType = MetadataObjectUtil.toEntityType(object);
+    try {
+      return entityStore
+          .relationOperations()
+          .listEntitiesByRelation(
+              SupportsRelationOperations.Type.TAG_METADATA_OBJECT_REL, identifier, entityType);
+    } catch (NoSuchEntityException e) {
+      throw new NoSuchMetadataObjectException(
+          e, "Failed to resolve effective tags for metadata object %s due to not found", object);
+    } catch (IOException e) {
+      LOG.error("Failed to resolve effective tags for metadata object {}", object, e);
+      throw new RuntimeException(e);
+    }
   }
 }
