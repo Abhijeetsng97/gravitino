@@ -625,6 +625,7 @@ subprojects {
     ":catalogs:hadoop-auth",
     ":catalogs:hadoop-common",
     ":maintenance:jobs",
+    ":maintenance:maintenance-common",
     ":maintenance:optimizer-api",
     ":maintenance:updaters",
     ":clients",
@@ -810,7 +811,7 @@ subprojects {
     ":common" to listOf("iceberg", "hadoop"),
     ":core" to listOf("spark", "iceberg", "kafka", "aws"),
     ":clients:client-java" to listOf("iceberg"),
-    ":catalogs:catalog-common" to listOf("doris"),
+    ":bundles:aws" to listOf("doris"),
     ":catalogs:hive-metastore-common" to listOf("iceberg"),
     ":catalogs:catalog-lakehouse-iceberg" to listOf("iceberg"),
     ":catalogs:catalog-lakehouse-paimon" to listOf("paimon"),
@@ -1187,7 +1188,7 @@ tasks {
         ":lance:lance-rest-server:copyLibAndConfigs",
         ":maintenance:optimizer:copyLibAndConfigs",
         ":plugins:idp-basic:copyLibAndConfigs",
-        ":plugins:tms:copyLibAndConfigs",
+        ":plugins:maintenance:copyLibAndConfigs",
         ":plugins:k8s-job-executor:copyLibAndConfigs"
       )
     if (!skipWeb) {
