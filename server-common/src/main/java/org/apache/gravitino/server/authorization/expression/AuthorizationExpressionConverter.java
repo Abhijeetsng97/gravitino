@@ -37,7 +37,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.gravitino.MetadataObject;
 import org.apache.gravitino.auth.AuthConstants;
+import org.apache.gravitino.authorization.Privilege;
+import org.apache.gravitino.policy.AccessControlContent;
 import org.apache.gravitino.server.authorization.MetadataAuthzHelper;
 
 /**
@@ -90,6 +93,7 @@ public class AuthorizationExpressionConverter {
         authorizationExpression,
         (expression) -> {
           String replacedExpression = replaceCanAccessMetadataPrivilege(expression);
+          replacedExpression = replaceTagPrivilegeChecks(replacedExpression);
           replacedExpression = replaceAnyPrivilege(replacedExpression);
           replacedExpression = replaceAnyExpressions(replacedExpression);
           Matcher matcher = PATTERN.matcher(replacedExpression);
@@ -403,6 +407,38 @@ public class AuthorizationExpressionConverter {
         expression.replaceAll(
             CAN_OPERATE_METADATA_PRIVILEGE,
             "authorizer.hasMetadataPrivilegePermission(p_metalake,p_type,p_fullName,authorizationContext)");
+    return expression;
+  }
+
+  /**
+   * Routes tag-conferrable {@code ANY_*} checks through the RBAC and tag-policy adapter.
+   *
+   * @param expression the authorization expression
+   * @return the expression with supported privilege checks routed through the adapter
+   */
+  private static String replaceTagPrivilegeChecks(String expression) {
+    for (Privilege.Name privilege : AccessControlContent.PERMITTED_PRIVILEGES) {
+      MetadataObject.Type type =
+          switch (privilege) {
+            case SELECT_TABLE, MODIFY_TABLE, PROBE_TABLE_LIKE -> MetadataObject.Type.TABLE;
+            case SELECT_VIEW -> MetadataObject.Type.VIEW;
+            case READ_FILESET, WRITE_FILESET -> MetadataObject.Type.FILESET;
+            case CONSUME_TOPIC, PRODUCE_TOPIC -> MetadataObject.Type.TOPIC;
+            case USE_MODEL -> MetadataObject.Type.MODEL;
+            case EXECUTE_FUNCTION -> MetadataObject.Type.FUNCTION;
+            case USE_SEMANTIC_MODEL -> MetadataObject.Type.SEMANTIC_MODEL;
+            default -> throw new IllegalArgumentException(
+                "Missing tag privilege scope: " + privilege);
+          };
+      expression =
+          expression.replace(
+              "ANY_" + privilege.name(),
+              "tagAuthorization.authorize(principal,METALAKE_NAME,{METALAKE,CATALOG,SCHEMA,"
+                  + type
+                  + "},@org.apache.gravitino.authorization.Privilege$Name@"
+                  + privilege.name()
+                  + ",authorizationContext)");
+    }
     return expression;
   }
 }

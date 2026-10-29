@@ -20,6 +20,7 @@ package org.apache.gravitino.authorization;
 import java.io.Closeable;
 import java.security.Principal;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.apache.gravitino.Entity;
@@ -54,6 +55,26 @@ public interface GravitinoAuthorizer extends Closeable {
       MetadataObject metadataObject,
       Privilege.Name privilege,
       AuthorizationRequestContext requestContext);
+
+  /**
+   * Finds tag-policy evidence for the original target of a privilege check.
+   *
+   * @param principal the caller
+   * @param metalake the containing metalake
+   * @param target the original target, not an ancestor from the RBAC walk
+   * @param privilege the requested privilege
+   * @param requestContext the request's shared context
+   * @return the matching binding, or empty when tag access does not apply
+   * @throws RuntimeException if tag-policy evaluation fails
+   */
+  default Optional<ResolvedTagPolicy> matchTagPolicy(
+      Principal principal,
+      String metalake,
+      MetadataObject target,
+      Privilege.Name privilege,
+      AuthorizationRequestContext requestContext) {
+    return Optional.empty();
+  }
 
   boolean deny(
       Principal principal,

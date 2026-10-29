@@ -34,6 +34,7 @@ import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.authorization.AuthorizationRequestContext;
 import org.apache.gravitino.authorization.GravitinoAuthorizer;
 import org.apache.gravitino.server.authorization.GravitinoAuthorizerProvider;
+import org.apache.gravitino.server.authorization.TagAuthorizationAdapter;
 import org.apache.gravitino.utils.NameIdentifierUtil;
 import org.apache.gravitino.utils.PrincipalUtils;
 import org.slf4j.Logger;
@@ -177,6 +178,7 @@ public class AuthorizationExpressionEvaluator {
     OgnlContext ognlContext = Ognl.createDefaultContext(null);
     ognlContext.put("principal", currentPrincipal);
     ognlContext.put("authorizer", authorizer);
+    ognlContext.put("tagAuthorization", new TagAuthorizationAdapter(authorizer));
     ognlContext.put("authorizationContext", requestContext);
     ognlContext.put("entityType", entityType.orElse(null));
     ognlContext.putAll(pathParams);
